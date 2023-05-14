@@ -8,4 +8,9 @@ public class TokenBucketRateLimiter implements RateLimiter{
     public boolean allow(String clientId) {
         return  false;
     }
+
+    @Override
+    public long getRemainingTimeMillis(String clientId) {
+        return 0;
+    }
 }
