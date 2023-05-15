@@ -34,9 +34,15 @@ public class RateLimitInterceptor implements HandlerInterceptor {
     }
 
     private String getClientId(HttpServletRequest request) {
-        // extract client id from request header, cookie or query param
-        return null;
+        // first try to get the IP address from the X-Forwarded-For header (in case of proxy)
+        String ipAddress = request.getHeader("X-Forwarded-For");
+        if (ipAddress == null || ipAddress.isEmpty()) {
+            // if X-Forwarded-For header is not present, get the IP address from the remote address
+            ipAddress = request.getRemoteAddr();
+        }
+        return ipAddress;
     }
+
 
     private String getMessage(){
         if (message == null)
