@@ -46,4 +46,45 @@ class TokenBucketRateLimiterTest {
     }
 
 
+   @Test
+    void testGetRemainingTimeMillis_EnoughTokens_ReturnsZero() {
+      // Arrange
+      TokenBucketRateLimiter rateLimiter = new TokenBucketRateLimiter(10, 1);
+
+      // Act
+      long remainingTimeMillis = rateLimiter.getRemainingTimeMillis("client1");
+
+      // Assert
+      assertEquals(0, remainingTimeMillis, "Remaining time should be zero");
+   }
+
+   @Test
+    void testGetRemainingTimeMillis_TokensExhausted_ReturnsCorrectTime() {
+      // Arrange
+      TokenBucketRateLimiter rateLimiter = new TokenBucketRateLimiter(2, 1);
+      rateLimiter.allow("client1");
+      rateLimiter.allow("client1");
+
+      // Act
+      long remainingTimeMillis = rateLimiter.getRemainingTimeMillis("client1");
+
+      // Assert
+      assertTrue(remainingTimeMillis > 0, "Remaining time should be greater than zero");
+      assertTrue(remainingTimeMillis <= 1000, "Remaining time should be less than or equal to 1000 milliseconds");
+   }
+
+   @Test
+    void testGetRemainingTimeMillis_ClientNeverRequested_ReturnsMaxTime() {
+      // Arrange
+      TokenBucketRateLimiter rateLimiter = new TokenBucketRateLimiter(10, 1);
+
+      // Act
+      long remainingTimeMillis = rateLimiter.getRemainingTimeMillis("client1");
+
+      // Assert
+      assertEquals(Long.MAX_VALUE, remainingTimeMillis, "Remaining time should be Long.MAX_VALUE");
+   }
+
+
+
 }
