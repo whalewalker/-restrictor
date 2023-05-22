@@ -1,5 +1,7 @@
 package com.ratelimiter.service;
 
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.Mac;
@@ -10,6 +12,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 
 @Component
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public  class RequestSignatureUtil {
     private static final String ALGORITHM = "HmacSHA256";
     private static final String SHARED_SECRET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";

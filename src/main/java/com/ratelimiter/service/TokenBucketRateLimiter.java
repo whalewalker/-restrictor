@@ -1,6 +1,5 @@
 package com.ratelimiter.service;
 
-import com.ratelimiter.annotations.Restrict;
 import com.ratelimiter.model.data.Bucket;
 import org.springframework.stereotype.Service;
 
@@ -9,23 +8,11 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class TokenBucketRateLimiter implements RateLimiter{
-    private  Bucket bucket;
     private final Map<String, Integer> violationCounts = new ConcurrentHashMap<>();
     private final Map<String, Double> tokens = new ConcurrentHashMap<>();
     private final Map<String, Long> lastRequestTimes = new ConcurrentHashMap<>();
     private final Map<String, Long> blockedClients = new ConcurrentHashMap<>();
     private final Map<String, Long> lastRefillTimes = new ConcurrentHashMap<>();
-
-    public TokenBucketRateLimiter(double capacity, double refillRate, double refillTimeMillis, long blockDurationMillis, int blockThreshold) {
-        this.bucket = Bucket.builder()
-                .capacity(capacity)
-                .refillRate(refillRate)
-                .refillTimeMillis(refillTimeMillis)
-                .blockDurationMillis(blockDurationMillis)
-                .blockThreshold(blockThreshold)
-                .build();
-    }
-
 
     /**
      * Checks if a client is allowed to make a request based on the rate limit settings.
@@ -34,22 +21,22 @@ public class TokenBucketRateLimiter implements RateLimiter{
      * @return true if the client is allowed to make a request, false otherwise
      */
     @Override
-    public synchronized boolean allow(String clientId) {
+    public synchronized boolean allow(String clientId, Bucket bucket) {
         long currentTime = System.currentTimeMillis();
 
         if (isBlocked(clientId, currentTime)) return false;
 
-        if (isBlockThresholdExceeded(clientId)) {
-            blockClient(clientId, currentTime);
+        if (isBlockThresholdExceeded(clientId, bucket)) {
+            blockClient(clientId, currentTime, bucket);
             return false;
         }
 
-        if (isRateExceeded(clientId, currentTime)) {
+        if (isRateExceeded(clientId, currentTime, bucket)) {
             incrementViolationCount(clientId);
             return false;
         }
 
-        refillTokens(clientId, currentTime);
+        refillTokens(clientId, currentTime, bucket);
 
         double tokenCount = tokens.getOrDefault(clientId, 0.0);
 
@@ -62,11 +49,10 @@ public class TokenBucketRateLimiter implements RateLimiter{
         }
     }
 
-    protected boolean isBlockThresholdExceeded(String clientId) {
+    protected boolean isBlockThresholdExceeded(String clientId, Bucket bucket) {
         Integer violationCount = violationCounts.getOrDefault(clientId, 0);
         return violationCount >= bucket.getBlockThreshold();
     }
-
 
     protected boolean isBlocked(String clientId, long currentTime) {
         Long blockedUntil = blockedClients.get(clientId);
@@ -81,18 +67,18 @@ public class TokenBucketRateLimiter implements RateLimiter{
         return false;
     }
 
-    protected void blockClient(String clientId, long currentTime) {
+    protected void blockClient(String clientId, long currentTime, Bucket bucket) {
         long blockedUntil = currentTime + bucket.getBlockDurationMillis();
         blockedClients.put(clientId, blockedUntil);
     }
 
-    private boolean isRateExceeded(String clientId, long currentTime) {
+    private boolean isRateExceeded(String clientId, long currentTime, Bucket bucket) {
         Long lastRequestTime = lastRequestTimes.get(clientId);
         if (lastRequestTime != null) {
             long timeElapsed = currentTime - lastRequestTime;
             double tokenCount = tokens.getOrDefault(clientId, 0.0);
 
-            if (tokenCount < 1 && timeElapsed <= bucket.getRefillRate()) {
+            if (tokenCount < 1 && timeElapsed <= bucket.getRefillTimeMillis()) {
                 return true;
             }
         }
@@ -104,7 +90,8 @@ public class TokenBucketRateLimiter implements RateLimiter{
         violationCounts.compute(clientId, (key, value) -> value == null ? 1 : value + 1);
     }
 
-    private void refillTokens(String clientId, long currentTime) {
+
+    private void refillTokens(String clientId, long currentTime, Bucket bucket) {
         tokens.compute(clientId, (key, value) -> {
             if(value == null) {
                 return bucket.getCapacity();
@@ -130,7 +117,7 @@ public class TokenBucketRateLimiter implements RateLimiter{
      * @return the remaining time in seconds until the next request is allowed, or 0 if the client can make a request immediately
      */
     @Override
-    public long getRemainingTimeSec(String clientId) {
+    public long getRemainingTimeSec(String clientId, Bucket bucket) {
         long currentTime = System.currentTimeMillis();
         Long lastRequestTime = lastRequestTimes.get(clientId);
         Long blockedTime = blockedClients.getOrDefault(clientId, lastRequestTime);
@@ -144,20 +131,4 @@ public class TokenBucketRateLimiter implements RateLimiter{
         }
     }
 
-
-    private Bucket createDefaultBucket(Restrict annotation) {
-        double capacity = annotation.capacity();
-        double refillRate = annotation.refillRate();
-        double refillTimeMillis = annotation.refillTimeMillis();
-        long blockDurationMillis = annotation.blockDurationMillis();
-        int blockThreshold = annotation.blockThreshold();
-        return Bucket.builder()
-                .capacity(capacity)
-                .refillTimeMillis(refillTimeMillis)
-                .refillRate(refillRate)
-                .blockThreshold(blockThreshold)
-                .blockDurationMillis(blockDurationMillis)
-                .build();
-
-    }
 }

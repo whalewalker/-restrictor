@@ -6,7 +6,6 @@ import com.ratelimiter.model.data.RateLimitType;
 import com.ratelimiter.service.RateLimiter;
 import com.ratelimiter.service.RateLimiterFactory;
 import com.ratelimiter.service.RequestSignatureUtil;
-import com.ratelimiter.service.TokenBucketRateLimiter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,13 +18,18 @@ import javax.servlet.http.HttpServletResponse;
 import java.lang.reflect.Method;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
-import java.util.Optional;
 
 @Slf4j
 @RequiredArgsConstructor
 public class RateLimitInterceptor implements HandlerInterceptor {
+    private final RateLimiter rateLimiter;
+    private static final String UNKNOWN_MESSAGE = "unknown";
+    private static final String REQUEST_SIGNATURE = "X-Request-Signature";
 
-    private final RateLimiterFactory rateLimiterFactory;
+
+    public RateLimitInterceptor(RateLimiterFactory rateLimiterFactory) {
+        this.rateLimiter = rateLimiterFactory.createRateLimiter(RateLimitType.TOKEN_BUCKET);
+    }
 
     @Value("${rateLimit.message}")
     private String message;
@@ -37,16 +41,14 @@ public class RateLimitInterceptor implements HandlerInterceptor {
             Restrict annotation = getRestrictAnnotation(handlerMethod.getMethod());
 
             if (annotation != null) {
-                RateLimiter rateLimiter = rateLimiterFactory.createRateLimiter(RateLimitType.TOKEN_BUCKET, annotation);
-                if (!validateRequestSignature(request, response, handler, annotation)) {
-                    return false;
-                }
+                Bucket bucket = createBucket(annotation);
+                validateRequestSignature(request, response,  annotation);
 
-                String clientId = getClientId(request);
-                if(!rateLimiter.allow(clientId)){
-                    String remainingTime = Long.toString(rateLimiter.getRemainingTimeSec(clientId));
+                String clientId = getClientId(response);
+                if (!rateLimiter.allow(clientId, bucket)) {
+                    String remainingTime = Long.toString(rateLimiter.getRemainingTimeSec(clientId, bucket));
                     response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
-                    String responseMessage = String.format("%s. Limit will reset in %s seconds", getMessage() , remainingTime);
+                    String responseMessage = String.format("%s. Limit will reset in %s seconds", getMessage(), remainingTime);
                     response.getWriter().write(responseMessage);
                     return false;
                 }
@@ -66,19 +68,19 @@ public class RateLimitInterceptor implements HandlerInterceptor {
     }
 
     private String getClientId(HttpServletRequest request, Restrict annotation) {
-        String clientId = annotation.clientId();
+        String clientId = annotation.userId();
         if (clientId.isEmpty()) {
             clientId = getIpAddress(request);
         }
         return clientId;
     }
 
-    private String getClientId(HttpServletRequest request){
-        return request.getHeader("X-Request-Signature");
+    private String getClientId(HttpServletResponse response) {
+        return response.getHeader(REQUEST_SIGNATURE);
     }
 
 
-    private String getMessage(){
+    private String getMessage() {
         if (message == null)
             return "Rate limit message";
         return message;
@@ -91,58 +93,54 @@ public class RateLimitInterceptor implements HandlerInterceptor {
 
     private String getIpAddress(HttpServletRequest request) {
         String ipAddress = request.getHeader("X-Forwarded-For");
-        if (ipAddress == null || ipAddress.isEmpty() || "unknown".equalsIgnoreCase(ipAddress)) {
+        if (ipAddress == null || ipAddress.isEmpty() || UNKNOWN_MESSAGE.equalsIgnoreCase(ipAddress)) {
             ipAddress = request.getHeader("Proxy-Client-IP");
         }
-        if (ipAddress == null || ipAddress.isEmpty() || "unknown".equalsIgnoreCase(ipAddress)) {
+        if (ipAddress == null || ipAddress.isEmpty() || UNKNOWN_MESSAGE.equalsIgnoreCase(ipAddress)) {
             ipAddress = request.getHeader("WL-Proxy-Client-IP");
         }
-        if (ipAddress == null || ipAddress.isEmpty() || "unknown".equalsIgnoreCase(ipAddress)) {
+        if (ipAddress == null || ipAddress.isEmpty() || UNKNOWN_MESSAGE.equalsIgnoreCase(ipAddress)) {
             ipAddress = request.getHeader("HTTP_CLIENT_IP");
         }
-        if (ipAddress == null || ipAddress.isEmpty() || "unknown".equalsIgnoreCase(ipAddress)) {
+        if (ipAddress == null || ipAddress.isEmpty() || UNKNOWN_MESSAGE.equalsIgnoreCase(ipAddress)) {
             ipAddress = request.getHeader("HTTP_X_FORWARDED_FOR");
         }
-        if (ipAddress == null || ipAddress.isEmpty() || "unknown".equalsIgnoreCase(ipAddress)) {
+        if (ipAddress == null || ipAddress.isEmpty() || UNKNOWN_MESSAGE.equalsIgnoreCase(ipAddress)) {
             ipAddress = request.getRemoteAddr();
         }
         return ipAddress;
     }
 
-    private String getClassName(Object handler) {
-        if (handler instanceof HandlerMethod) {
-            HandlerMethod handlerMethod = (HandlerMethod) handler;
-            return handlerMethod.getBeanType().getSimpleName();
-        }
-        return "";
-    }
-
-    private boolean validateRequestSignature(HttpServletRequest request, HttpServletResponse response, Object handler, Restrict annotation) throws NoSuchAlgorithmException, InvalidKeyException {
-        String requestString = getRequestString(request);
+    private void validateRequestSignature(HttpServletRequest request, HttpServletResponse response, Restrict annotation) throws NoSuchAlgorithmException, InvalidKeyException {
+        String signatureInput  = getRequestString(request);
         String clientId = getClientId(request, annotation);
-        String className = getClassName(handler);
-
-        String receivedSignature = request.getHeader("X-Request-Signature");
-
-        // Check if requestString is present, otherwise use className
-        String signatureInput = Optional.of(requestString).orElse(className);
-
+        String receivedSignature = request.getHeader(REQUEST_SIGNATURE);
         String newSignature = RequestSignatureUtil.generateRequestSignature(signatureInput, clientId);
 
-        if (receivedSignature == null || !receivedSignature.equals(newSignature)) {
-            response.setHeader("X-Request-Signature", newSignature);
+        if (receivedSignature != null && receivedSignature.equals(newSignature)) {
+            boolean isSignatureValid = RequestSignatureUtil.verifyRequestSignature(signatureInput, receivedSignature, clientId);
+            if (isSignatureValid) {
+                return;
+            }
         }
-
-        boolean isSignatureValid = RequestSignatureUtil.verifyRequestSignature(signatureInput, receivedSignature, clientId);
-
-        if (!isSignatureValid) {
-            response.setStatus(HttpStatus.UNAUTHORIZED.value());
-            return false;
-        }
-
-        return true;
+        response.setHeader(REQUEST_SIGNATURE, newSignature);
     }
 
 
+    private Bucket createBucket(Restrict annotation) {
+        double capacity = annotation.capacity();
+        double refillRate = annotation.refillRate();
+        double refillTimeMillis = annotation.refillTimeMillis();
+        long blockDurationMillis = annotation.blockDurationMillis();
+        int blockThreshold = annotation.blockThreshold();
+        return Bucket.builder()
+                .capacity(capacity)
+                .refillTimeMillis(refillTimeMillis)
+                .refillRate(refillRate)
+                .blockThreshold(blockThreshold)
+                .blockDurationMillis(blockDurationMillis)
+                .build();
+
+    }
 
 }

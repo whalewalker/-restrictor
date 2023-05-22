@@ -8,11 +8,17 @@ import org.springframework.web.bind.annotation.RestController;
 
 @Slf4j
 @RestController
+@Restrict(capacity = 2, refillRate = 1, blockThreshold = 5, userId = "new_user")
 public class TestController {
 
     @GetMapping()
-    @Restrict(capacity = 2, refillRate = 1, blockThreshold = 5)
     public ResponseEntity<String> greeting() {
         return ResponseEntity.ok("Good afternoon!");
+    }
+
+    @GetMapping("/user")
+    @Restrict(capacity = 1, refillRate = 1, blockThreshold = 2)
+    public ResponseEntity<String> user() {
+        return ResponseEntity.ok("Good afternoon Abdullah!");
     }
 }

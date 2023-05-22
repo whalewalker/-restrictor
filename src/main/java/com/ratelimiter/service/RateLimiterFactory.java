@@ -1,34 +1,18 @@
 package com.ratelimiter.service;
 
-import com.ratelimiter.annotations.Restrict;
-import com.ratelimiter.model.data.Bucket;
 import com.ratelimiter.model.data.RateLimitType;
 import org.springframework.stereotype.Component;
 
 @Component
 public class RateLimiterFactory {
-    public RateLimiter createTokenBucketRateLimiter(Restrict annotation) {
-        double capacity = annotation.capacity();
-        double refillRate = annotation.refillRate();
-        double refillTimeMillis = annotation.refillTimeMillis();
-        long blockDurationMillis = annotation.blockDurationMillis();
-        int blockThreshold = annotation.blockThreshold();
-
-        Bucket bucket = Bucket.builder()
-                .capacity(capacity)
-                .refillRate(refillRate)
-                .refillTimeMillis(refillTimeMillis)
-                .blockDurationMillis(blockDurationMillis)
-                .blockThreshold(blockThreshold)
-                .build();
-
-        return new TokenBucketRateLimiter(capacity, refillRate, refillTimeMillis, blockDurationMillis, blockThreshold);
+    public RateLimiter createTokenBucketRateLimiter() {
+        return new TokenBucketRateLimiter();
     }
 
-    public RateLimiter createRateLimiter(RateLimitType rateLimitType, Restrict annotation) {
+    public RateLimiter createRateLimiter(RateLimitType rateLimitType) {
         switch (rateLimitType) {
             case TOKEN_BUCKET:
-                return createTokenBucketRateLimiter(annotation);
+                return createTokenBucketRateLimiter();
             case OTHER_TYPE:
             // Add more cases for other rate limiting types
             default:
