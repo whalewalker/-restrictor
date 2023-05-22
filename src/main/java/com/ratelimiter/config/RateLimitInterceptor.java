@@ -4,11 +4,9 @@ import com.ratelimiter.annotations.Restrict;
 import com.ratelimiter.model.data.Bucket;
 import com.ratelimiter.model.data.RateLimitType;
 import com.ratelimiter.service.RateLimiter;
-import com.ratelimiter.service.RateLimiterFactory;
 import com.ratelimiter.service.RequestSignatureUtil;
-import lombok.RequiredArgsConstructor;
+import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerInterceptor;
@@ -20,19 +18,16 @@ import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 
 @Slf4j
-@RequiredArgsConstructor
+@Builder
 public class RateLimitInterceptor implements HandlerInterceptor {
-    private final RateLimiter rateLimiter;
+    private RateLimiter rateLimiter;
     private static final String UNKNOWN_MESSAGE = "unknown";
     private static final String REQUEST_SIGNATURE = "X-Request-Signature";
-
-
-    public RateLimitInterceptor(RateLimiterFactory rateLimiterFactory) {
-        this.rateLimiter = rateLimiterFactory.createRateLimiter(RateLimitType.TOKEN_BUCKET);
-    }
-
-    @Value("${rateLimit.message}")
     private String message;
+    private String secretKey;
+    private RateLimitType rateLimitType;
+
+
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
@@ -42,7 +37,7 @@ public class RateLimitInterceptor implements HandlerInterceptor {
 
             if (annotation != null) {
                 Bucket bucket = createBucket(annotation);
-                validateRequestSignature(request, response,  annotation);
+                validateRequestSignature(request, response, annotation, secretKey);
 
                 String clientId = getClientId(response);
                 if (!rateLimiter.allow(clientId, bucket)) {
@@ -111,14 +106,14 @@ public class RateLimitInterceptor implements HandlerInterceptor {
         return ipAddress;
     }
 
-    private void validateRequestSignature(HttpServletRequest request, HttpServletResponse response, Restrict annotation) throws NoSuchAlgorithmException, InvalidKeyException {
-        String signatureInput  = getRequestString(request);
+    private void validateRequestSignature(HttpServletRequest request, HttpServletResponse response, Restrict annotation, String secretKey) throws NoSuchAlgorithmException, InvalidKeyException {
+        String signatureInput = getRequestString(request);
         String clientId = getClientId(request, annotation);
         String receivedSignature = request.getHeader(REQUEST_SIGNATURE);
-        String newSignature = RequestSignatureUtil.generateRequestSignature(signatureInput, clientId);
+        String newSignature = RequestSignatureUtil.generateRequestSignature(signatureInput, clientId, secretKey);
 
         if (receivedSignature != null && receivedSignature.equals(newSignature)) {
-            boolean isSignatureValid = RequestSignatureUtil.verifyRequestSignature(signatureInput, receivedSignature, clientId);
+            boolean isSignatureValid = RequestSignatureUtil.verifyRequestSignature(signatureInput, receivedSignature, clientId, secretKey);
             if (isSignatureValid) {
                 return;
             }
@@ -126,6 +121,13 @@ public class RateLimitInterceptor implements HandlerInterceptor {
         response.setHeader(REQUEST_SIGNATURE, newSignature);
     }
 
+    private String getClassName(Object handler) {
+        if (handler instanceof HandlerMethod) {
+            HandlerMethod handlerMethod = (HandlerMethod) handler;
+            return handlerMethod.getBeanType().getSimpleName();
+        }
+        return "";
+    }
 
     private Bucket createBucket(Restrict annotation) {
         double capacity = annotation.capacity();
@@ -140,7 +142,5 @@ public class RateLimitInterceptor implements HandlerInterceptor {
                 .blockThreshold(blockThreshold)
                 .blockDurationMillis(blockDurationMillis)
                 .build();
-
     }
-
 }

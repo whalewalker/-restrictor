@@ -1,11 +1,13 @@
 package com.ratelimiter.service;
 
 import com.ratelimiter.model.data.RateLimitType;
+import lombok.Builder;
 import org.springframework.stereotype.Component;
 
 @Component
+@Builder
 public class RateLimiterFactory {
-    public RateLimiter createTokenBucketRateLimiter() {
+    public TokenBucketRateLimiter createTokenBucketRateLimiter() {
         return new TokenBucketRateLimiter();
     }
 

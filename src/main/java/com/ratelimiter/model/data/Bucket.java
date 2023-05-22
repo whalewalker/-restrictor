@@ -1,6 +1,7 @@
 package com.ratelimiter.model.data;
 
-import lombok.*;
+import lombok.Builder;
+import lombok.Data;
 
 @Data
 @Builder
@@ -8,6 +9,6 @@ public class Bucket {
     private final Double capacity;
     private final Double refillRate;
     private final Double refillTimeMillis;
-    private Long blockDurationMillis;
-    private Integer blockThreshold;
+    private final Long blockDurationMillis;
+    private final Integer blockThreshold;
 }

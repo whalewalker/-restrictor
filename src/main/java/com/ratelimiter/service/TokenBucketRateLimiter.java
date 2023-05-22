@@ -1,12 +1,14 @@
 package com.ratelimiter.service;
 
 import com.ratelimiter.model.data.Bucket;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
+@RequiredArgsConstructor
 public class TokenBucketRateLimiter implements RateLimiter{
     private final Map<String, Integer> violationCounts = new ConcurrentHashMap<>();
     private final Map<String, Double> tokens = new ConcurrentHashMap<>();
