@@ -23,7 +23,7 @@ public class RateLimitConfiguration {
 
         return  RateLimitInterceptor.builder()
                 .rateLimitType(RateLimitType.TOKEN_BUCKET)
-                .rateLimitData(tokenBucket)
+                .limitConfig(tokenBucket)
                 .message("Custom message")
                 .secretKey("created a new secret key")
                 .build();
