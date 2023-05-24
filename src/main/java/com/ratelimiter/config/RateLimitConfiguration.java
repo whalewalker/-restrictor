@@ -1,7 +1,7 @@
 package com.ratelimiter.config;
 
 import com.ratelimiter.model.data.RateLimitType;
-import com.ratelimiter.service.RateLimiterFactory;
+import com.ratelimiter.model.data.TokenBucket;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -9,13 +9,23 @@ import org.springframework.context.annotation.Configuration;
 @RequiredArgsConstructor
 @Configuration
 public class RateLimitConfiguration {
-    private final RateLimiterFactory rateLimiterFactory;
     @Bean
-    public RateLimitInterceptor rateLimitInterceptor() {
+    public RateLimitInterceptor<?> rateLimitInterceptor() {
+
+        TokenBucket tokenBucket = TokenBucket.builder()
+                .capacity(2)
+                .refillRate(1)
+                .refillTimeMillis(6000.0)
+                .blockThreshold(10)
+                .blockDurationMillis(6000.0)
+                .build();
+
+
         return  RateLimitInterceptor.builder()
-                .rateLimiter(rateLimiterFactory.createRateLimiter(RateLimitType.TOKEN_BUCKET))
+                .rateLimitType(RateLimitType.TOKEN_BUCKET)
+                .rateLimitData(tokenBucket)
                 .message("Custom message")
-                .secretKey("new secret key")
+                .secretKey("created a new secret key")
                 .build();
     }
 

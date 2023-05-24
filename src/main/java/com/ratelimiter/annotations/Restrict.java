@@ -8,10 +8,10 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.METHOD, ElementType.TYPE})
 public @interface Restrict {
-    double capacity() default 1000;
-    double refillRate() default 100;
+    int capacity() default 1000;
+    int refillRate() default 100;
     double refillTimeMillis() default 60000;
-    long blockDurationMillis() default 60000;
+    int blockDurationMillis() default 60000;
     int blockThreshold() default 10;
     String userId() default "";
 }

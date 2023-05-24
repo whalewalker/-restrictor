@@ -5,10 +5,10 @@ import lombok.Data;
 
 @Data
 @Builder
-public class Bucket {
-    private final Double capacity;
-    private final Double refillRate;
+public class TokenBucket {
+    private final Integer capacity;
+    private final Integer refillRate;
     private final Double refillTimeMillis;
-    private final Long blockDurationMillis;
+    private final Double blockDurationMillis;
     private final Integer blockThreshold;
 }
