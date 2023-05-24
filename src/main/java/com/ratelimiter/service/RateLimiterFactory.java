@@ -1,20 +1,22 @@
 package com.ratelimiter.service;
 
 import com.ratelimiter.model.data.RateLimitType;
+import lombok.Builder;
 import org.springframework.stereotype.Component;
 
 @Component
+@Builder
 public class RateLimiterFactory {
-    public RateLimiter createTokenBucketRateLimiter() {
-        return new TokenBucketRateLimiter();
+    public static TokenBucketRateLimiter.TokenBucketRateLimiterBuilder createTokenBucketRateLimiterBuilder() {
+        return TokenBucketRateLimiter.builder();
     }
 
-    public RateLimiter createRateLimiter(RateLimitType rateLimitType) {
+    public static RateLimiter createRateLimiter(RateLimitType rateLimitType) {
         switch (rateLimitType) {
             case TOKEN_BUCKET:
-                return createTokenBucketRateLimiter();
+                return createTokenBucketRateLimiterBuilder().build();
             case OTHER_TYPE:
-            // Add more cases for other rate limiting types
+                // Add more cases for other rate limiting types
             default:
                 throw new IllegalArgumentException("Unsupported rate limiting type: " + rateLimitType);
         }

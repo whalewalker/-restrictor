@@ -1,15 +1,19 @@
 package com.ratelimiter.service;
 
-import com.ratelimiter.model.data.Bucket;
+import com.ratelimiter.model.data.TokenBucket;
+import lombok.Builder;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
-public class TokenBucketRateLimiter implements RateLimiter{
+@RequiredArgsConstructor
+@Builder
+public class TokenBucketRateLimiter implements RateLimiter {
     private final Map<String, Integer> violationCounts = new ConcurrentHashMap<>();
-    private final Map<String, Double> tokens = new ConcurrentHashMap<>();
+    private final Map<String, Integer> tokens = new ConcurrentHashMap<>();
     private final Map<String, Long> lastRequestTimes = new ConcurrentHashMap<>();
     private final Map<String, Long> blockedClients = new ConcurrentHashMap<>();
     private final Map<String, Long> lastRefillTimes = new ConcurrentHashMap<>();
@@ -21,37 +25,42 @@ public class TokenBucketRateLimiter implements RateLimiter{
      * @return true if the client is allowed to make a request, false otherwise
      */
     @Override
-    public synchronized boolean allow(String clientId, Bucket bucket) {
-        long currentTime = System.currentTimeMillis();
+    public synchronized <T> boolean allow(String clientId, T bucket) {
+        if (bucket instanceof TokenBucket) {
+            TokenBucket tokenBucket = (TokenBucket) bucket;
 
-        if (isBlocked(clientId, currentTime)) return false;
+            long currentTime = System.currentTimeMillis();
 
-        if (isBlockThresholdExceeded(clientId, bucket)) {
-            blockClient(clientId, currentTime, bucket);
-            return false;
+            if (isBlocked(clientId, currentTime)) return false;
+
+            if (isBlockThresholdExceeded(clientId, tokenBucket)) {
+                blockClient(clientId, currentTime, tokenBucket);
+                return false;
+            }
+
+            if (isRateExceeded(clientId, currentTime, tokenBucket)) {
+                incrementViolationCount(clientId);
+                return false;
+            }
+
+            refillTokens(clientId, currentTime, tokenBucket);
+
+            int tokenCount = tokens.getOrDefault(clientId, 0);
+
+            if (tokenCount >= 1) {
+                tokens.put(clientId, tokenCount - 1);
+                return true;
+            } else {
+                lastRequestTimes.put(clientId, currentTime);
+                return false;
+            }
         }
-
-        if (isRateExceeded(clientId, currentTime, bucket)) {
-            incrementViolationCount(clientId);
-            return false;
-        }
-
-        refillTokens(clientId, currentTime, bucket);
-
-        double tokenCount = tokens.getOrDefault(clientId, 0.0);
-
-        if (tokenCount >= 1) {
-            tokens.put(clientId, tokenCount - 1);
-            return true;
-        } else {
-            lastRequestTimes.put(clientId, currentTime);
-            return false;
-        }
+        throw new IllegalArgumentException("Unsupported bucket type: " + bucket.getClass().getSimpleName());
     }
 
-    protected boolean isBlockThresholdExceeded(String clientId, Bucket bucket) {
+    protected boolean isBlockThresholdExceeded(String clientId, TokenBucket tokenBucket) {
         Integer violationCount = violationCounts.getOrDefault(clientId, 0);
-        return violationCount >= bucket.getBlockThreshold();
+        return violationCount >= tokenBucket.getBlockThreshold();
     }
 
     protected boolean isBlocked(String clientId, long currentTime) {
@@ -67,18 +76,18 @@ public class TokenBucketRateLimiter implements RateLimiter{
         return false;
     }
 
-    protected void blockClient(String clientId, long currentTime, Bucket bucket) {
-        long blockedUntil = currentTime + bucket.getBlockDurationMillis();
+    protected void blockClient(String clientId, long currentTime, TokenBucket tokenBucket) {
+        long blockedUntil = (long) (currentTime + tokenBucket.getBlockDurationMillis());
         blockedClients.put(clientId, blockedUntil);
     }
 
-    private boolean isRateExceeded(String clientId, long currentTime, Bucket bucket) {
+    private boolean isRateExceeded(String clientId, long currentTime, TokenBucket tokenBucket) {
         Long lastRequestTime = lastRequestTimes.get(clientId);
         if (lastRequestTime != null) {
             long timeElapsed = currentTime - lastRequestTime;
-            double tokenCount = tokens.getOrDefault(clientId, 0.0);
+            double tokenCount = tokens.getOrDefault(clientId, 0);
 
-            if (tokenCount < 1 && timeElapsed <= bucket.getRefillTimeMillis()) {
+            if (tokenCount < 1 && timeElapsed <= tokenBucket.getRefillTimeMillis()) {
                 return true;
             }
         }
@@ -91,19 +100,19 @@ public class TokenBucketRateLimiter implements RateLimiter{
     }
 
 
-    private void refillTokens(String clientId, long currentTime, Bucket bucket) {
+    private void refillTokens(String clientId, long currentTime, TokenBucket tokenBucket) {
         tokens.compute(clientId, (key, value) -> {
             if(value == null) {
-                return bucket.getCapacity();
+                return tokenBucket.getCapacity();
             }
-            double currentTokens = tokens.getOrDefault(clientId, 0.0);
+            double currentTokens = tokens.getOrDefault(clientId, 0);
             long timeElapsed = currentTime - lastRefillTimes.getOrDefault(clientId, currentTime);
 
-            double tokensToAdd = bucket.getRefillRate() * (timeElapsed / bucket.getRefillTimeMillis());
+            double tokensToAdd = tokenBucket.getRefillRate() * (timeElapsed / tokenBucket.getRefillTimeMillis());
             double newTokens = currentTokens + tokensToAdd;
 
-            double token = Math.min(newTokens, bucket.getCapacity());
-            token = Math.max(token, 0.0);
+            int token = (int) Math.min(newTokens, tokenBucket.getCapacity());
+            token = (int) Math.max(token, 0.0);
             lastRefillTimes.put(clientId, currentTime);
             return token;
         });
@@ -117,18 +126,22 @@ public class TokenBucketRateLimiter implements RateLimiter{
      * @return the remaining time in seconds until the next request is allowed, or 0 if the client can make a request immediately
      */
     @Override
-    public long getRemainingTimeSec(String clientId, Bucket bucket) {
-        long currentTime = System.currentTimeMillis();
-        Long lastRequestTime = lastRequestTimes.get(clientId);
-        Long blockedTime = blockedClients.getOrDefault(clientId, lastRequestTime);
+    public <T> long getRemainingTimeSec(String clientId, T bucket) {
+        if (bucket instanceof TokenBucket) {
+            TokenBucket tokenBucket = (TokenBucket) bucket;
+            long currentTime = System.currentTimeMillis();
+            Long lastRequestTime = lastRequestTimes.get(clientId);
+            Long blockedTime = blockedClients.getOrDefault(clientId, lastRequestTime);
 
-        if (lastRequestTime == null) {
-            return 0;
-        } else {
-            long timeElapsed = currentTime - blockedTime;
-            long remainingTime = (long) (bucket.getRefillTimeMillis() - (timeElapsed % bucket.getRefillTimeMillis()));
-            return remainingTime / 1000;
+            if (lastRequestTime == null) {
+                return 0;
+            } else {
+                long timeElapsed = currentTime - blockedTime;
+                long remainingTime = (long) (tokenBucket.getRefillTimeMillis() - (timeElapsed % tokenBucket.getRefillTimeMillis()));
+                return remainingTime / 1000;
+            }
         }
+        throw new IllegalArgumentException("Unsupported bucket type: " + bucket.getClass().getSimpleName());
     }
 
 }
