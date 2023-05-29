@@ -1,0 +1,11 @@
+<rootProject>
+    <name>rate-limiter</name>
+</rootProject>
+
+<servers>
+<server>
+    <id>space-maven</id>
+    <username>Whalewalker</username>
+    <password>eyJhbGciOiJSUzUxMiJ9.eyJzdWIiOiI0TGpLRlYzcG1tYXIiLCJhdWQiOiJjaXJjbGV0LXdlYi11aSIsIm9yZ0RvbWFpbiI6ImtsZWFua29kZXIiLCJuYW1lIjoiV2hhbGV3YWxrZXIiLCJpc3MiOiJodHRwczpcL1wva2xlYW5rb2Rlci5qZXRicmFpbnMuc3BhY2UiLCJwZXJtX3Rva2VuIjoiMjBQODNoMFIwc3gwIiwicHJpbmNpcGFsX3R5cGUiOiJVU0VSIiwiaWF0IjoxNjg1MzQyNDg0fQ.ZPlgHblA_nq7DXkwScz2rM5DycKPNHf93kB3Nmbl378O6tjfYsTlR-cC4h5dQOXysx8jwAnLVI71kMc5ydDr5md3Jn5Gy1jFPcuyfMq2XbECG7MqGTDSiacVeitDohzPn54CXuxawNtrsn7o8-hiA75q_mlkWxSK-Wq2j3P-Zl4</password>
+</server>
+</servers>

@@ -16,6 +16,15 @@
     <properties>
         <java.version>11</java.version>
     </properties>
+
+    <repositories>
+        <repository>
+            <id>space-maven</id>
+            <url>https://maven.pkg.jetbrains.space/kleankoder/p/main/maven</url>
+        </repository>
+    </repositories>
+
+
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -48,6 +57,13 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <distributionManagement>
+        <repository>
+            <id>space-maven</id>
+            <url>https://maven.pkg.jetbrains.space/kleankoder/p/main/maven</url>
+        </repository>
+    </distributionManagement>
 
     <build>
         <plugins>
